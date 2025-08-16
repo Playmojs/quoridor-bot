@@ -49,12 +49,22 @@ pub fn render_board(board: &Board) -> String {
                     && y < WALL_GRID_HEIGHT
                     && matches!(board.walls[x][y], Some(WallOrientation::Vertical));
                 let vertical_wall_char = if vertical_wall { '│' } else { ' ' };
+                let write_indices = x < WALL_GRID_WIDTH && !vertical_wall;
+                let (x_str, y_str) = if write_indices {
+                    (x.to_string(), y.to_string())
+                } else {
+                    (" ".to_string(), " ".to_string())
+                };
                 if wall_right {
                     output.push_str("────────");
                 } else if wall_left {
-                    output.push_str(format!("───── {} ", vertical_wall_char).as_str());
+                    output.push_str(
+                        format!("─────{}{}{}", x_str, vertical_wall_char, y_str,).as_str(),
+                    );
                 } else {
-                    output.push_str(format!("      {} ", vertical_wall_char).as_str());
+                    output.push_str(
+                        format!("     {}{}{}", x_str, vertical_wall_char, y_str,).as_str(),
+                    );
                 }
             }
         }

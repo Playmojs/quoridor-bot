@@ -75,10 +75,7 @@ fn neighbors(board: &Board, player: Player, player_position: &PiecePosition) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        data_model::{Game, WallOrientation},
-        render_board,
-    };
+    use crate::data_model::{Game, WallOrientation};
 
     #[test]
     fn single_wall_test() {
