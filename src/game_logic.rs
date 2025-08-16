@@ -147,7 +147,7 @@ pub fn is_move_legal_with_player_at_position(
                     ([(0, -1), (0, 0), (0, 1)], WallOrientation::Horizontal)
                 }
             };
-            let blocks_path = |player: Player| {
+            let blocks_path = |player_to_block_check: Player| {
                 let mut game_copy = game.clone();
                 execute_move_unchecked(
                     &mut game_copy,
@@ -157,7 +157,7 @@ pub fn is_move_legal_with_player_at_position(
                         position: position.clone(),
                     },
                 );
-                a_star(&game_copy.board, player).is_none()
+                a_star(&game_copy.board, player_to_block_check).is_none()
             };
             game.walls_left[player.as_index()] > 0
                 && position.x < WALL_GRID_WIDTH
