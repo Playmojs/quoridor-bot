@@ -12,7 +12,7 @@ pub mod square_outline_iterator;
 fn main() {
     let mut game = Game::new();
     let mut player = Player::A;
-    loop {
+    for _ in 0..5 {
         println!("{}", render_board::render_board(&game.board));
         println!(
             "{} to move. Walls: A: {}, B: {}",
@@ -24,7 +24,7 @@ fn main() {
         let player_move = match player {
             Player::A => {
                 let start_time = std::time::Instant::now();
-                let (score, best_move) = bot::best_move_alpha_beta(&game, player, 2);
+                let (score, best_move) = bot::best_move_alpha_beta(&game, player, 4);
                 let elapsed = start_time.elapsed();
                 println!(
                     "Best move: {:?} with score: {} (took {:?})",
@@ -32,7 +32,16 @@ fn main() {
                 );
                 best_move.unwrap()
             }
-            Player::B => get_human_move(&game, player),
+            Player::B => {
+                let start_time = std::time::Instant::now();
+                let (score, best_move) = bot::best_move_alpha_beta(&game, player, 4);
+                let elapsed = start_time.elapsed();
+                println!(
+                    "Best move: {:?} with score: {} (took {:?})",
+                    best_move, score, elapsed
+                );
+                best_move.unwrap()
+            }
         };
         game_logic::execute_move_unchecked(&mut game, player, &player_move);
         player = player.opponent();

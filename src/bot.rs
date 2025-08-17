@@ -4,7 +4,10 @@ use crate::{
         Direction, Game, MovePiece, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
         WallOrientation, WallPosition,
     },
-    game_logic::{execute_move_unchecked, is_move_legal},
+    game_logic::{
+        execute_move_unchecked, is_move_piece_legal_with_player_at_position,
+        room_for_wall_placement,
+    },
     render_board,
     square_outline_iterator::SquareOutlineIterator,
 };
@@ -13,7 +16,8 @@ pub const WINNING_SCORE: isize = -LOOSING_SCORE;
 
 pub fn heuristic_board_score(game: &Game) -> isize {
     let opponent_path = a_star(&game.board, Player::B);
-    if opponent_path.is_none() {
+    let player_path = a_star(&game.board, Player::A);
+    if player_path.is_none() {
         println!(
             "Opponent has no path in the following board:\n{}",
             render_board::render_board(&game.board)
@@ -23,7 +27,6 @@ pub fn heuristic_board_score(game: &Game) -> isize {
     if opponent_distance == 0 {
         return LOOSING_SCORE;
     }
-    let player_path = a_star(&game.board, Player::A);
     let player_distance = player_path.unwrap().len() as isize;
     if player_distance == 0 {
         return WINNING_SCORE;
@@ -41,7 +44,7 @@ pub fn best_move_alpha_beta(
     player: Player,
     depth: usize,
 ) -> (isize, Option<PlayerMove>) {
-    alpha_beta(&game, depth, LOOSING_SCORE, WINNING_SCORE, player)
+    alpha_beta(game, depth, LOOSING_SCORE, WINNING_SCORE, player)
 }
 
 pub fn alpha_beta(
@@ -60,9 +63,14 @@ pub fn alpha_beta(
     let score = match player {
         Player::A => {
             let mut value = LOOSING_SCORE;
-            for player_move in legal_moves_ordered_by_heuristic_quality(game, player) {
+            for player_move in moves_ordered_by_heuristic_quality(game, player) {
                 let mut child_game_state = game.clone();
                 execute_move_unchecked(&mut child_game_state, player, &player_move);
+                if a_star(&child_game_state.board, player).is_none()
+                    || a_star(&child_game_state.board, player.opponent()).is_none()
+                {
+                    continue;
+                }
                 let (score, _) =
                     alpha_beta(&child_game_state, depth - 1, alpha, beta, player.opponent());
                 if score > value {
@@ -78,9 +86,14 @@ pub fn alpha_beta(
         }
         Player::B => {
             let mut value = WINNING_SCORE;
-            for player_move in legal_moves_ordered_by_heuristic_quality(game, player) {
+            for player_move in moves_ordered_by_heuristic_quality(game, player) {
                 let mut child_game_state = game.clone();
                 execute_move_unchecked(&mut child_game_state, player, &player_move);
+                if a_star(&child_game_state.board, player).is_none()
+                    || a_star(&child_game_state.board, player.opponent()).is_none()
+                {
+                    continue;
+                }
                 let (score, _) =
                     alpha_beta(&child_game_state, depth - 1, alpha, beta, player.opponent());
                 if score < value {
@@ -98,21 +111,26 @@ pub fn alpha_beta(
     (score, best_move)
 }
 
-fn legal_moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<PlayerMove> {
+fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<PlayerMove> {
     let mut moves: Vec<PlayerMove> = Default::default();
     let player_position = game.board.player_position(player);
     let opponent_position = game.board.player_position(player.opponent());
-    let x_diff = opponent_position.x as isize - player_position.x as isize;
-    let y_diff = opponent_position.y as isize - player_position.y as isize;
+    let x_diff = opponent_position.x() as isize - player_position.x() as isize;
+    let y_diff = opponent_position.y() as isize - player_position.y() as isize;
 
     let push_if_move_piece_is_legal =
         |moves: &mut Vec<PlayerMove>, direction: Direction, direction_on_collision: Direction| {
-            let move_piece = PlayerMove::MovePiece(MovePiece {
+            let move_piece = MovePiece {
                 direction,
                 direction_on_collision,
-            });
-            if is_move_legal(game, player, &move_piece) {
-                moves.push(move_piece);
+            };
+            if is_move_piece_legal_with_player_at_position(
+                &game.board,
+                player,
+                player_position,
+                &move_piece,
+            ) {
+                moves.push(PlayerMove::MovePiece(move_piece));
             }
         };
 
@@ -137,8 +155,8 @@ fn legal_moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<
 
     let origin = opponent_position;
     for i in 1.. {
-        let top_left_x = origin.x as isize - i as isize;
-        let top_left_y = origin.y as isize - i as isize;
+        let top_left_x = origin.x() as isize - i as isize;
+        let top_left_y = origin.y() as isize - i as isize;
         let side_length = 2 * i;
         let mut some_in_bounds = false;
         for (x, y) in SquareOutlineIterator::new(top_left_x, top_left_y, side_length) {
@@ -156,7 +174,9 @@ fn legal_moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<
                         y: y as usize,
                     },
                 };
-                if is_move_legal(game, player, &player_move) {
+                if game.walls_left[player.as_index()] > 0
+                    && room_for_wall_placement(&game.board, orientation, x, y)
+                {
                     moves.push(player_move);
                 }
             }

@@ -10,10 +10,25 @@ pub enum WallOrientation {
     Vertical,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct PiecePosition {
-    pub x: usize,
-    pub y: usize,
+    pub index: usize,
+}
+
+impl PiecePosition {
+    pub fn new(x: usize, y: usize) -> Self {
+        Self {
+            index: y * PIECE_GRID_WIDTH + x,
+        }
+    }
+
+    pub fn x(&self) -> usize {
+        self.index % PIECE_GRID_WIDTH
+    }
+
+    pub fn y(&self) -> usize {
+        self.index / PIECE_GRID_WIDTH
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -69,7 +84,7 @@ impl Board {
     pub fn new() -> Self {
         Self {
             walls: Default::default(),
-            player_positions: [PiecePosition { x: 4, y: 0 }, PiecePosition { x: 4, y: 8 }],
+            player_positions: [PiecePosition::new(4, 0), PiecePosition::new(4, 8)],
         }
     }
 

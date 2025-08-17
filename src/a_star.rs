@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::data_model::{Board, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player};
 use crate::game_logic::{
@@ -7,40 +8,45 @@ use crate::game_logic::{
 
 pub fn heuristic(pos: &PiecePosition, player: Player) -> usize {
     match player {
-        Player::A => PIECE_GRID_HEIGHT - 1 - pos.y,
-        Player::B => pos.y,
+        Player::A => PIECE_GRID_HEIGHT - 1 - pos.y(),
+        Player::B => pos.y(),
     }
 }
 
 pub fn a_star(board: &Board, player: Player) -> Option<Vec<PiecePosition>> {
-    let start = board.player_position(player);
-    let mut open_set = vec![start.clone()];
+    let start = board.player_position(player).clone();
+    let mut open_heap = BinaryHeap::new();
+    let mut open_set = HashSet::new();
     let mut came_from = HashMap::<PiecePosition, PiecePosition>::new();
     let mut g_score = HashMap::<PiecePosition, usize>::new();
     let mut f_score = HashMap::<PiecePosition, usize>::new();
     g_score.insert(start.clone(), 0);
-    f_score.insert(start.clone(), heuristic(start, player));
+    let h = heuristic(&start, player);
+    f_score.insert(start.clone(), h);
+    open_heap.push(Reverse((h, start.clone())));
+    open_set.insert(start.clone());
 
-    while let Some(current) = open_set.iter().min_by_key(|pos| f_score[pos]).cloned() {
+    while let Some(Reverse((_, current))) = open_heap.pop() {
+        open_set.remove(&current);
+
         if heuristic(&current, player) == 0 {
             return Some(reconstruct_path(&came_from, &current));
         }
-        open_set.retain(|pos| pos != &current);
         for neighbor in neighbors(board, player, &current) {
             let tentative_g_score = g_score[&current] + 1;
             if tentative_g_score < *g_score.get(&neighbor).unwrap_or(&usize::MAX) {
                 came_from.insert(neighbor.clone(), current.clone());
                 g_score.insert(neighbor.clone(), tentative_g_score);
-                f_score.insert(
-                    neighbor.clone(),
-                    tentative_g_score + heuristic(&neighbor, player),
-                );
-                if !open_set.contains(&neighbor) {
-                    open_set.push(neighbor);
+                let f = tentative_g_score + heuristic(&neighbor, player);
+                f_score.insert(neighbor.clone(), f);
+
+                if open_set.insert(neighbor.clone()) {
+                    open_heap.push(Reverse((f, neighbor.clone())));
                 }
             }
         }
     }
+
     None
 }
 
@@ -48,13 +54,12 @@ fn reconstruct_path(
     came_from: &HashMap<PiecePosition, PiecePosition>,
     current: &PiecePosition,
 ) -> Vec<PiecePosition> {
-    let mut total_path = vec![current.clone()];
+    let mut total_path = Vec::new();
     let mut current = current;
     while let Some(next) = came_from.get(current) {
-        total_path.push(next.clone());
+        total_path.push(current.clone());
         current = next;
     }
-    total_path.pop(); // Remove the start position
     total_path.reverse();
     total_path
 }
@@ -63,11 +68,13 @@ fn neighbors(board: &Board, player: Player, player_position: &PiecePosition) -> 
     MovePiece::iter()
         .filter_map(|move_piece| {
             is_move_piece_legal_with_player_at_position(board, player, player_position, &move_piece)
-                .then_some(new_position_after_move_piece_unchecked(
-                    player_position,
-                    &move_piece,
-                    board.player_position(player.opponent()),
-                ))
+                .then(|| {
+                    new_position_after_move_piece_unchecked(
+                        player_position,
+                        &move_piece,
+                        board.player_position(player.opponent()),
+                    )
+                })
         })
         .collect()
 }
@@ -87,15 +94,15 @@ mod tests {
         assert_eq!(
             path,
             vec![
-                PiecePosition { x: 4, y: 1 },
-                PiecePosition { x: 4, y: 2 },
-                PiecePosition { x: 5, y: 2 },
-                PiecePosition { x: 5, y: 3 },
-                PiecePosition { x: 5, y: 4 },
-                PiecePosition { x: 5, y: 5 },
-                PiecePosition { x: 5, y: 6 },
-                PiecePosition { x: 5, y: 7 },
-                PiecePosition { x: 5, y: 8 },
+                PiecePosition::new(4, 1),
+                PiecePosition::new(4, 2),
+                PiecePosition::new(5, 2),
+                PiecePosition::new(5, 3),
+                PiecePosition::new(5, 4),
+                PiecePosition::new(5, 5),
+                PiecePosition::new(5, 6),
+                PiecePosition::new(5, 7),
+                PiecePosition::new(5, 8),
             ]
         );
     }
@@ -103,8 +110,8 @@ mod tests {
     #[test]
     fn complex_wall_test() {
         let mut game = Game::new();
-        game.board.player_positions[Player::A.as_index()] = PiecePosition { x: 4, y: 4 };
-        game.board.player_positions[Player::B.as_index()] = PiecePosition { x: 3, y: 4 };
+        game.board.player_positions[Player::A.as_index()] = PiecePosition::new(4, 4);
+        game.board.player_positions[Player::B.as_index()] = PiecePosition::new(3, 4);
         game.board.walls[2][3] = Some(WallOrientation::Vertical);
         game.board.walls[3][3] = Some(WallOrientation::Vertical);
         game.board.walls[2][5] = Some(WallOrientation::Vertical);
@@ -118,7 +125,7 @@ mod tests {
     #[test]
     fn on_goal_test() {
         let mut game = Game::new();
-        game.board.player_positions[0] = PiecePosition { x: 4, y: 8 };
+        game.board.player_positions[0] = PiecePosition::new(4, 8);
         let path = a_star(&game.board, Player::A);
         assert!(path.is_some());
         let path = path.unwrap();
