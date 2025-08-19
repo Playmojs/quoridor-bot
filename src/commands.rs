@@ -1,55 +1,9 @@
-use crate::data_model::{
-    Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition,
+use crate::{
+    data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
+    game_logic::is_move_legal,
 };
 
-pub mod a_star;
-pub mod all_moves;
-pub mod bot;
-pub mod data_model;
-pub mod game_logic;
-pub mod render_board;
-pub mod square_outline_iterator;
-fn main() {
-    let mut game = Game::new();
-    let mut player = Player::A;
-    for _ in 0..5 {
-        println!("{}", render_board::render_board(&game.board));
-        println!(
-            "{} to move. Walls: A: {}, B: {}",
-            player.to_string(),
-            game.walls_left[Player::A.as_index()],
-            game.walls_left[Player::B.as_index()]
-        );
-
-        let player_move = match player {
-            Player::A => {
-                let start_time = std::time::Instant::now();
-                let (score, best_move) = bot::best_move_alpha_beta(&game, player, 4);
-                let elapsed = start_time.elapsed();
-                println!(
-                    "Best move: {:?} with score: {} (took {:?})",
-                    best_move, score, elapsed
-                );
-                best_move.unwrap()
-            }
-            Player::B => {
-                let start_time = std::time::Instant::now();
-                let (score, best_move) = bot::best_move_alpha_beta(&game, player, 4);
-                let elapsed = start_time.elapsed();
-                println!(
-                    "Best move: {:?} with score: {} (took {:?})",
-                    best_move, score, elapsed
-                );
-                best_move.unwrap()
-            }
-        };
-        game_logic::execute_move_unchecked(&mut game, player, &player_move);
-        player = player.opponent();
-        render_board::render_board(&game.board);
-    }
-}
-
-fn get_human_move(game: &Game, player: Player) -> PlayerMove {
+pub fn get_human_move(game: &Game, player: Player) -> PlayerMove {
     use std::io::{self, Write};
 
     loop {
@@ -59,7 +13,7 @@ fn get_human_move(game: &Game, player: Player) -> PlayerMove {
         let input = input.trim();
 
         if let Some(player_move) = parse_player_move(input, player) {
-            if game_logic::is_move_legal(game, player, &player_move) {
+            if is_move_legal(game, player, &player_move) {
                 return player_move;
             } else {
                 println!("Illegal move.");
@@ -69,8 +23,7 @@ fn get_human_move(game: &Game, player: Player) -> PlayerMove {
         }
     }
 }
-
-fn parse_player_move(input: &str, player: Player) -> Option<PlayerMove> {
+pub fn parse_player_move(input: &str, player: Player) -> Option<PlayerMove> {
     let mut chars = input.chars();
 
     let direction_from_char = |c: Option<char>| match c {

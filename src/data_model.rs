@@ -47,6 +47,7 @@ pub struct Board {
 
 #[derive(Default, Debug, Clone)]
 pub struct Game {
+    pub player: Player,
     pub board: Board,
     pub walls_left: [usize; PLAYER_COUNT],
 }
@@ -74,8 +75,9 @@ pub enum PlayerMove {
     MovePiece(MovePiece),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Player {
+    #[default]
     A = 0,
     B = 1,
 }
@@ -112,6 +114,7 @@ impl Board {
 impl Game {
     pub fn new() -> Self {
         Self {
+            player: Player::default(),
             board: Board::new(),
             walls_left: [10, 10],
         }

@@ -3,7 +3,18 @@ name = "quoridor-bot"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "quoridor-bot-gui"
+path = "src/main_gui.rs"
+
+[[bin]]
+name = "quoridor-bot-cli"
+path = "src/main_cli.rs"
+
 [dependencies]
+clap = "4.5.45"
+clap_derive = "4.5.45"
+ggez = "0.9.3"
 rand = "0.9.2"
 strum = { version = "0.25", features = ["derive"] }
 strum_macros = "0.25.3"

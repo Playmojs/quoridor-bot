@@ -24,6 +24,7 @@ pub fn execute_move_unchecked(game: &mut Game, player: Player, player_move: &Pla
             game.board.player_positions[player.as_index()] = new_position;
         }
     }
+    game.player = player.opponent();
 }
 
 pub fn is_move_legal(game: &Game, player: Player, player_move: &PlayerMove) -> bool {
