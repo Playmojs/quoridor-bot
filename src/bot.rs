@@ -73,7 +73,7 @@ pub fn alpha_beta(
                 }
                 let (score, _) =
                     alpha_beta(&child_game_state, depth - 1, alpha, beta, player.opponent());
-                if score > value {
+                if score > value || best_move.is_none() {
                     best_move = Some(player_move);
                 }
                 value = value.max(score);
@@ -96,7 +96,7 @@ pub fn alpha_beta(
                 }
                 let (score, _) =
                     alpha_beta(&child_game_state, depth - 1, alpha, beta, player.opponent());
-                if score < value {
+                if score < value || best_move.is_none() {
                     best_move = Some(player_move);
                 }
                 value = value.min(score);

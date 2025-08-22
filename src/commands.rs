@@ -1,9 +1,9 @@
 use clap::Parser;
 
 use crate::{
+    bot::best_move_alpha_beta,
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
-    get_bot_move,
 };
 
 #[derive(clap_derive::Subcommand, Debug)]
@@ -158,4 +158,16 @@ pub fn parse_player_move(input: &str) -> Option<PlayerMove> {
         },
         _ => None,
     }
+}
+
+fn get_bot_move(game: &Game, player: Player, depth: usize) -> PlayerMove {
+    let start_time = std::time::Instant::now();
+    let (score, best_move) = best_move_alpha_beta(game, player, depth);
+    let elapsed = start_time.elapsed();
+    let best_move = best_move.unwrap();
+    println!(
+        "Best move: {} with score: {} (took {:?})",
+        best_move, score, elapsed
+    );
+    best_move
 }

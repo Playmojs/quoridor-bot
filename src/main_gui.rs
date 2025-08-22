@@ -1,5 +1,5 @@
 use crate::commands::{Command, Session, execute_command, get_legal_command};
-use crate::data_model::{Game, PiecePosition, Player, PlayerMove};
+use crate::data_model::{Game, PiecePosition, Player};
 use crate::player_type::PlayerType;
 use clap::Parser;
 use ggez::conf::WindowMode;
@@ -107,16 +107,4 @@ impl EventHandler for GuiState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         draw::draw(&self.current_state, ctx)
     }
-}
-
-fn get_bot_move(game: &Game, player: Player, depth: usize) -> PlayerMove {
-    let start_time = std::time::Instant::now();
-    let (score, best_move) = bot::best_move_alpha_beta(game, player, depth);
-    let elapsed = start_time.elapsed();
-    let best_move = best_move.unwrap();
-    println!(
-        "Best move: {} with score: {} (took {:?})",
-        best_move, score, elapsed
-    );
-    best_move
 }
