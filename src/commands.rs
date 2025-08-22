@@ -1,7 +1,7 @@
 use clap::Parser;
 
 use crate::{
-    bot::best_move_alpha_beta,
+    bot::{LOOSING_SCORE, WINNING_SCORE, alpha_beta, best_move_alpha_beta},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
 };
@@ -23,6 +23,13 @@ pub enum AuxCommand {
     Undo {
         #[arg(default_value_t = 1)]
         moves: usize,
+    },
+    Eval {
+        #[arg(default_value_t = 4)]
+        depth: usize,
+
+        #[arg()]
+        move_to_evaluate: Option<String>,
     },
 }
 const AUX_COMMAND_NAME: &str = "aux";
@@ -78,6 +85,34 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     session.game_states.pop();
                 }
             }
+            AuxCommand::Eval {
+                depth,
+                move_to_evaluate,
+            } => {
+                if let Some(move_str) = move_to_evaluate {
+                    if let Some(player_move) = parse_player_move(&move_str) {
+                        if is_move_legal(current_game_state, player, &player_move) {
+                            let mut child_game_state = current_game_state.clone();
+                            execute_move_unchecked(&mut child_game_state, player, &player_move);
+                            let (score, _) = alpha_beta(
+                                &child_game_state,
+                                depth,
+                                LOOSING_SCORE,
+                                WINNING_SCORE,
+                                player,
+                            );
+                            println!("Move {} evaluates to {}", player_move, score);
+                        } else {
+                            println!("Invalid move");
+                        }
+                    } else {
+                        println!("Could not parse move: {}", move_str);
+                    }
+                } else {
+                    let (score, _) = best_move_alpha_beta(current_game_state, player, depth);
+                    println!("Best move evaluates to {}", score);
+                }
+            }
         },
     }
 }
@@ -97,6 +132,7 @@ pub fn get_legal_command(game: &Game, player: Player) -> Command {
     use std::io::{self, Write};
 
     loop {
+        print!("> ");
         io::stdout().flush().unwrap();
         let mut input = String::new();
         io::stdin().read_line(&mut input).unwrap();
