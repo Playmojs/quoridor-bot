@@ -24,7 +24,7 @@ pub fn render_board(board: &Board) -> String {
         for x in 0..PIECE_GRID_WIDTH {
             let player_char =
                 if board.player_positions[0].x() == x && board.player_positions[0].y() == y {
-                    'A'
+                    'W'
                 } else if board.player_positions[1].x() == x && board.player_positions[1].y() == y {
                     'B'
                 } else {

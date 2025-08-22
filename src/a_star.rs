@@ -8,8 +8,8 @@ use crate::game_logic::{
 
 pub fn heuristic(pos: &PiecePosition, player: Player) -> usize {
     match player {
-        Player::A => PIECE_GRID_HEIGHT - 1 - pos.y(),
-        Player::B => pos.y(),
+        Player::White => PIECE_GRID_HEIGHT - 1 - pos.y(),
+        Player::Black => pos.y(),
     }
 }
 
@@ -88,7 +88,7 @@ mod tests {
     fn single_wall_test() {
         let mut game = Game::new();
         game.board.walls[3][2] = Some(WallOrientation::Horizontal);
-        let path = a_star(&game.board, Player::A);
+        let path = a_star(&game.board, Player::White);
         assert!(path.is_some());
         let path = path.unwrap();
         assert_eq!(
@@ -110,15 +110,15 @@ mod tests {
     #[test]
     fn complex_wall_test() {
         let mut game = Game::new();
-        game.board.player_positions[Player::A.as_index()] = PiecePosition::new(4, 4);
-        game.board.player_positions[Player::B.as_index()] = PiecePosition::new(3, 4);
+        game.board.player_positions[Player::White.as_index()] = PiecePosition::new(4, 4);
+        game.board.player_positions[Player::Black.as_index()] = PiecePosition::new(3, 4);
         game.board.walls[2][3] = Some(WallOrientation::Vertical);
         game.board.walls[3][3] = Some(WallOrientation::Vertical);
         game.board.walls[2][5] = Some(WallOrientation::Vertical);
         game.board.walls[4][3] = Some(WallOrientation::Horizontal);
         game.board.walls[4][4] = Some(WallOrientation::Horizontal);
         game.board.walls[5][5] = Some(WallOrientation::Vertical);
-        let path = a_star(&game.board, Player::A);
+        let path = a_star(&game.board, Player::White);
         assert!(path.is_some());
     }
 
@@ -126,7 +126,7 @@ mod tests {
     fn on_goal_test() {
         let mut game = Game::new();
         game.board.player_positions[0] = PiecePosition::new(4, 8);
-        let path = a_star(&game.board, Player::A);
+        let path = a_star(&game.board, Player::White);
         assert!(path.is_some());
         let path = path.unwrap();
         assert_eq!(path.len(), 0);

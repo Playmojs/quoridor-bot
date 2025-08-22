@@ -1,7 +1,8 @@
-use crate::commands::get_human_move;
-use crate::data_model::{Game, Player, PlayerMove};
+use crate::commands::{Command, Session, execute_command, get_legal_command};
+use crate::data_model::{Game, PiecePosition, Player, PlayerMove};
 use crate::player_type::PlayerType;
 use clap::Parser;
+use ggez::conf::WindowMode;
 use ggez::event::{self, EventHandler};
 use ggez::{Context, ContextBuilder, GameResult};
 use std::sync::mpsc::{Receiver, channel};
@@ -30,13 +31,25 @@ struct Args {
 
     #[clap(short, long)]
     end_after_moves: Option<usize>,
+
+    #[clap(short, long)]
+    skip_initial_moves: bool,
 }
 
 fn main() {
     let args = Args::parse();
     let mut game = Game::new();
+    if args.skip_initial_moves {
+        game.board.player_positions[Player::White.as_index()] = PiecePosition::new(4, 3);
+        game.board.player_positions[Player::Black.as_index()] = PiecePosition::new(4, 5);
+    }
 
     let (ctx, event_loop) = ContextBuilder::new("quoridor-bot", "Torstein Tenstad")
+        .window_mode(
+            WindowMode::default()
+                .resizable(true)
+                .dimensions(1600.0, 1600.0),
+        )
         .build()
         .unwrap();
     let (tx, rx) = channel::<Game>();
@@ -47,24 +60,31 @@ fn main() {
 
     std::thread::spawn(move || {
         let player_type = |p: Player| match p {
-            Player::A => args.player_a,
-            Player::B => args.player_b,
+            Player::White => args.player_a,
+            Player::Black => args.player_b,
+        };
+        let mut session = Session {
+            game_states: vec![game],
         };
         loop {
-            let player = game.player;
+            let current_game_state = session.game_states.last().unwrap();
+            let player = current_game_state.player;
             println!(
                 "{} ({}) to move. Walls: A: {}, B: {}",
                 player.to_string(),
                 player_type(player),
-                game.walls_left[Player::A.as_index()],
-                game.walls_left[Player::B.as_index()]
+                current_game_state.walls_left[Player::White.as_index()],
+                current_game_state.walls_left[Player::Black.as_index()]
             );
-            let player_move = match player_type(player) {
-                PlayerType::Human => get_human_move(&game, player),
-                PlayerType::Bot => get_bot_move(&game, player, args.depth),
+            let command = match player_type(player) {
+                PlayerType::Human => get_legal_command(current_game_state, player),
+                PlayerType::Bot => {
+                    Command::AuxCommand(commands::AuxCommand::PlayBotMove { depth: args.depth })
+                }
             };
-            game_logic::execute_move_unchecked(&mut game, player, &player_move);
-            tx.send(game.clone()).unwrap();
+            execute_command(&mut session, command);
+            tx.send(session.game_states.last().unwrap().clone())
+                .unwrap();
         }
     });
 
@@ -93,9 +113,10 @@ fn get_bot_move(game: &Game, player: Player, depth: usize) -> PlayerMove {
     let start_time = std::time::Instant::now();
     let (score, best_move) = bot::best_move_alpha_beta(game, player, depth);
     let elapsed = start_time.elapsed();
+    let best_move = best_move.unwrap();
     println!(
-        "Best move: {:?} with score: {} (took {:?})",
+        "Best move: {} with score: {} (took {:?})",
         best_move, score, elapsed
     );
-    best_move.unwrap()
+    best_move
 }

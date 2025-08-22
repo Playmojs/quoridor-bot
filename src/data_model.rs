@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub const PIECE_GRID_WIDTH: usize = 9;
 pub const PIECE_GRID_HEIGHT: usize = 9;
 pub const WALL_GRID_WIDTH: usize = PIECE_GRID_WIDTH - 1;
@@ -8,6 +10,15 @@ pub const PLAYER_COUNT: usize = 2;
 pub enum WallOrientation {
     Horizontal,
     Vertical,
+}
+
+impl WallOrientation {
+    pub fn to_char(&self) -> char {
+        match self {
+            WallOrientation::Horizontal => 'h',
+            WallOrientation::Vertical => 'v',
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -66,7 +77,7 @@ pub struct MovePiece {
     pub direction_on_collision: Direction,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum PlayerMove {
     PlaceWall {
         orientation: WallOrientation,
@@ -75,11 +86,30 @@ pub enum PlayerMove {
     MovePiece(MovePiece),
 }
 
+impl Display for PlayerMove {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PlayerMove::MovePiece(move_piece) => {
+                write!(
+                    f,
+                    "m{}{}",
+                    move_piece.direction.to_char(),
+                    move_piece.direction_on_collision.to_char()
+                )
+            }
+            PlayerMove::PlaceWall {
+                orientation,
+                position,
+            } => write!(f, "{}{}{}", orientation.to_char(), position.x, position.y),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Player {
     #[default]
-    A = 0,
-    B = 1,
+    White = 0,
+    Black = 1,
 }
 
 impl Board {
@@ -87,6 +117,12 @@ impl Board {
         Self {
             walls: Default::default(),
             player_positions: [PiecePosition::new(4, 0), PiecePosition::new(4, 8)],
+        }
+    }
+    pub fn new_with_initial_moves_skipped() -> Self {
+        Self {
+            walls: Default::default(),
+            player_positions: [PiecePosition::new(4, 3), PiecePosition::new(4, 5)],
         }
     }
 
@@ -119,6 +155,14 @@ impl Game {
             walls_left: [10, 10],
         }
     }
+
+    pub fn new_with_initial_moves_skipped() -> Self {
+        Self {
+            player: Player::default(),
+            board: Board::new_with_initial_moves_skipped(),
+            walls_left: [10, 10],
+        }
+    }
 }
 
 impl Direction {
@@ -133,13 +177,21 @@ impl Direction {
             Direction::Right => (1, 0),
         }
     }
+    pub fn to_char(&self) -> char {
+        match self {
+            Direction::Up => 'u',
+            Direction::Down => 'd',
+            Direction::Left => 'l',
+            Direction::Right => 'r',
+        }
+    }
 }
 
 impl Player {
     pub fn opponent(&self) -> Player {
         match self {
-            Player::A => Player::B,
-            Player::B => Player::A,
+            Player::White => Player::Black,
+            Player::Black => Player::White,
         }
     }
 
@@ -149,8 +201,8 @@ impl Player {
 
     pub fn to_string(self) -> &'static str {
         match self {
-            Player::A => "A",
-            Player::B => "B",
+            Player::White => "White",
+            Player::Black => "Black",
         }
     }
 }

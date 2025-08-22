@@ -15,8 +15,8 @@ pub const LOOSING_SCORE: isize = isize::MIN + 1;
 pub const WINNING_SCORE: isize = -LOOSING_SCORE;
 
 pub fn heuristic_board_score(game: &Game) -> isize {
-    let opponent_path = a_star(&game.board, Player::B);
-    let player_path = a_star(&game.board, Player::A);
+    let opponent_path = a_star(&game.board, Player::Black);
+    let player_path = a_star(&game.board, Player::White);
     if player_path.is_none() {
         println!(
             "Opponent has no path in the following board:\n{}",
@@ -31,8 +31,8 @@ pub fn heuristic_board_score(game: &Game) -> isize {
     if player_distance == 0 {
         return WINNING_SCORE;
     }
-    let player_walls_left = game.walls_left[Player::A.as_index()] as isize;
-    let opponent_walls_left = game.walls_left[Player::B.as_index()] as isize;
+    let player_walls_left = game.walls_left[Player::White.as_index()] as isize;
+    let opponent_walls_left = game.walls_left[Player::Black.as_index()] as isize;
     let distance_score = opponent_distance - player_distance;
     let wall_score = player_walls_left - opponent_walls_left;
     let (distance_priority, wall_priority) = (1, 0);
@@ -61,7 +61,7 @@ pub fn alpha_beta(
     let mut beta = beta;
     let mut best_move = None;
     let score = match player {
-        Player::A => {
+        Player::White => {
             let mut value = LOOSING_SCORE;
             for player_move in moves_ordered_by_heuristic_quality(game, player) {
                 let mut child_game_state = game.clone();
@@ -84,7 +84,7 @@ pub fn alpha_beta(
             }
             value
         }
-        Player::B => {
+        Player::Black => {
             let mut value = WINNING_SCORE;
             for player_move in moves_ordered_by_heuristic_quality(game, player) {
                 let mut child_game_state = game.clone();
