@@ -1,15 +1,19 @@
 use crate::commands::{Command, Session, execute_command, get_legal_command};
 use crate::data_model::{Game, PiecePosition, Player};
 use crate::player_type::PlayerType;
+use crate::nn_bot::{BurnPolicyValueNet, PolicyValueNet};
 use clap::Parser;
 use ggez::conf::WindowMode;
 use ggez::event::{self, EventHandler};
 use ggez::{Context, ContextBuilder, GameResult};
+use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, channel};
+use burn::backend::NdArray;
 
 pub mod a_star;
 pub mod all_moves;
 pub mod bot;
+pub mod nn_bot;
 pub mod commands;
 pub mod data_model;
 pub mod draw;
@@ -22,6 +26,9 @@ pub mod square_outline_iterator;
 struct Args {
     #[clap(short, long, default_value_t = 4)]
     depth: usize,
+
+    #[clap(short, long, default_value_t = 0.0)]
+    temperature: f32,
 
     #[clap(short='a', long, default_value_t = PlayerType::Human)]
     player_a: PlayerType,
@@ -42,6 +49,21 @@ fn main() {
     if args.skip_initial_moves {
         game.board.player_positions[Player::White.as_index()] = PiecePosition::new(4, 3);
         game.board.player_positions[Player::Black.as_index()] = PiecePosition::new(4, 5);
+    }
+
+    type Backend = NdArray;
+
+    let device = <Backend as burn::tensor::backend::Backend>::Device::default();
+
+    let mut neural_networks: HashMap<Player, Box<dyn PolicyValueNet>> = HashMap::new();
+
+    if args.player_a == PlayerType::NeuralNet
+    {
+        neural_networks.insert(Player::White, Box::new(BurnPolicyValueNet::<Backend>::new(device)));
+    }
+    if args.player_b == PlayerType::NeuralNet
+    {
+        neural_networks.insert(Player::Black, Box::new(BurnPolicyValueNet::<Backend>::new(device)));
     }
 
     let (ctx, event_loop) = ContextBuilder::new("quoridor-bot", "Torstein Tenstad")
@@ -65,6 +87,7 @@ fn main() {
         };
         let mut session = Session {
             game_states: vec![game],
+            neural_networks: neural_networks
         };
         loop {
             let current_game_state = session.game_states.last().unwrap();
@@ -80,6 +103,9 @@ fn main() {
                 PlayerType::Human => get_legal_command(current_game_state, player),
                 PlayerType::Bot => {
                     Command::AuxCommand(commands::AuxCommand::PlayBotMove { depth: args.depth })
+                }
+                PlayerType::NeuralNet => {
+                    Command::AuxCommand(commands::AuxCommand::PlayNNMove {temperature: args.temperature})
                 }
             };
             execute_command(&mut session, command);
