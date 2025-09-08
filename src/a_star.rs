@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::hash::Hash;
 
 use crate::data_model::{Board, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player};
 use crate::game_logic::{
@@ -15,20 +16,16 @@ pub fn heuristic(pos: &PiecePosition, player: Player) -> usize {
 
 pub fn a_star(board: &Board, player: Player) -> Option<Vec<PiecePosition>> {
     let start = board.player_position(player).clone();
-    let mut open_heap = BinaryHeap::new();
-    let mut open_set = HashSet::new();
+    let mut open_set = PriorityQueue::new();
     let mut came_from = HashMap::<PiecePosition, PiecePosition>::new();
     let mut g_score = HashMap::<PiecePosition, usize>::new();
     let mut f_score = HashMap::<PiecePosition, usize>::new();
     g_score.insert(start.clone(), 0);
     let h = heuristic(&start, player);
     f_score.insert(start.clone(), h);
-    open_heap.push(Reverse((h, start.clone())));
-    open_set.insert(start.clone());
+    open_set.insert(h, start.clone());
 
-    while let Some(Reverse((_, current))) = open_heap.pop() {
-        open_set.remove(&current);
-
+    while let Some((_, current)) = open_set.pop() {
         if heuristic(&current, player) == 0 {
             return Some(reconstruct_path(&came_from, &current));
         }
@@ -40,14 +37,50 @@ pub fn a_star(board: &Board, player: Player) -> Option<Vec<PiecePosition>> {
                 let f = tentative_g_score + heuristic(&neighbor, player);
                 f_score.insert(neighbor.clone(), f);
 
-                if open_set.insert(neighbor.clone()) {
-                    open_heap.push(Reverse((f, neighbor.clone())));
-                }
+                open_set.insert(f, neighbor.clone());
             }
         }
     }
 
     None
+}
+
+struct PriorityQueue<K, T> {
+    heap: BinaryHeap<Reverse<(K, T)>>,
+    set: HashSet<T>,
+}
+
+impl<K: Ord + Clone, T: Ord + Hash + Clone> PriorityQueue<K, T> {
+    pub fn new() -> Self {
+        Self {
+            heap: BinaryHeap::new(),
+            set: HashSet::new(),
+        }
+    }
+
+    pub fn peek(&self) -> Option<(K, T)> {
+        let Reverse((k, t)) = self.heap.peek()?;
+        Some((k.clone(), t.clone()))
+    }
+
+    pub fn pop(&mut self) -> Option<(K, T)> {
+        let Reverse((k, t)) = self.heap.pop()?;
+        self.set.remove(&t);
+        Some((k, t))
+    }
+
+    pub fn insert(&mut self, k: K, t: T) -> bool {
+        self.heap.push(Reverse((k, t.clone())));
+        self.set.insert(t)
+    }
+
+    pub fn contains(&self, t: &T) -> bool {
+        self.set.contains(t)
+    }
+
+    pub fn remove(&mut self, t: &T) {
+        self.heap.retain(|Reverse((k, t_))| t != t_);
+    }
 }
 
 fn reconstruct_path(
