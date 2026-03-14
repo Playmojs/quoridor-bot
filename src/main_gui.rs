@@ -8,7 +8,6 @@ use ggez::{Context, ContextBuilder, GameResult};
 use std::sync::mpsc::{Receiver, channel};
 
 pub mod a_star;
-pub mod all_moves;
 pub mod bot;
 pub mod commands;
 pub mod data_model;
@@ -32,6 +31,9 @@ struct Args {
     #[clap(short, long)]
     end_after_moves: Option<usize>,
 
+    #[clap(short, long, default_value_t = 1000)]
+    window_size: usize,
+
     #[clap(short, long)]
     skip_initial_moves: bool,
 }
@@ -48,7 +50,7 @@ fn main() {
         .window_mode(
             WindowMode::default()
                 .resizable(true)
-                .dimensions(1600.0, 1600.0),
+                .dimensions(args.window_size as f32, args.window_size as f32),
         )
         .build()
         .unwrap();

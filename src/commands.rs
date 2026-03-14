@@ -1,7 +1,7 @@
 use clap::Parser;
 
 use crate::{
-    bot::{LOOSING_SCORE, WINNING_SCORE, alpha_beta, best_move_alpha_beta},
+    bot::{WHITE_LOSES_BLACK_WINS, WHITE_WINS_BLACK_LOSES, alpha_beta, best_move_alpha_beta},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
 };
@@ -32,7 +32,7 @@ pub enum AuxCommand {
         move_to_evaluate: Option<String>,
     },
 }
-const AUX_COMMAND_NAME: &str = "aux";
+const AUX_COMMAND_NAME: &str = "";
 
 #[derive(clap_derive::Parser, Debug)]
 #[command(name = AUX_COMMAND_NAME)]
@@ -97,8 +97,8 @@ pub fn execute_command(session: &mut Session, command: Command) {
                             let (score, _) = alpha_beta(
                                 &child_game_state,
                                 depth,
-                                LOOSING_SCORE,
-                                WINNING_SCORE,
+                                WHITE_LOSES_BLACK_WINS,
+                                WHITE_WINS_BLACK_LOSES,
                                 player,
                             );
                             println!("Move {} evaluates to {}", player_move, score);
@@ -117,14 +117,23 @@ pub fn execute_command(session: &mut Session, command: Command) {
     }
 }
 
-pub fn parse_command(input: &str) -> Option<Command> {
-    match AuxCommandParserHelper::try_parse_from(
-        std::iter::once(AUX_COMMAND_NAME).chain(input.split_whitespace()),
-    ) {
-        Ok(aux_command_parser_helper) => {
-            Some(Command::AuxCommand(aux_command_parser_helper.command))
+pub enum ParseCommandResult {
+    Command(Command),
+    HelpText(String),
+    InvalidInput,
+}
+
+pub fn parse_command(input: &str) -> ParseCommandResult {
+    match parse_player_move(input) {
+        Some(player_move) => ParseCommandResult::Command(Command::PlayMove(player_move)),
+        None => {
+            match AuxCommandParserHelper::try_parse_from(
+                std::iter::once(AUX_COMMAND_NAME).chain(input.split_whitespace()),
+            ) {
+                Ok(h) => ParseCommandResult::Command(Command::AuxCommand(h.command)),
+                Err(e) => ParseCommandResult::HelpText(format!("{}", e)),
+            }
         }
-        Err(_) => Some(Command::PlayMove(parse_player_move(input)?)),
     }
 }
 
@@ -138,15 +147,15 @@ pub fn get_legal_command(game: &Game, player: Player) -> Command {
         io::stdin().read_line(&mut input).unwrap();
         let input = input.trim();
 
-        if let Some(command) = parse_command(input) {
-            if matches!(&command, Command::PlayMove(player_move) if !is_move_legal(game, player, player_move))
+        match parse_command(input) {
+            ParseCommandResult::Command(Command::PlayMove(player_move))
+                if !is_move_legal(game, player, &player_move) =>
             {
                 println!("Invalid move.")
-            } else {
-                break command;
             }
-        } else {
-            println!("Invalid input format.");
+            ParseCommandResult::Command(command) => break command,
+            ParseCommandResult::HelpText(help_text) => println!("{}", help_text),
+            ParseCommandResult::InvalidInput => println!("Invalid input format."),
         }
     }
 }

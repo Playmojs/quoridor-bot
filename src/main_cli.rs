@@ -7,7 +7,6 @@ use crate::{
 };
 
 pub mod a_star;
-pub mod all_moves;
 pub mod bot;
 pub mod commands;
 pub mod data_model;
@@ -46,10 +45,10 @@ fn main() {
     for move_number in 0.. {
         let current_game_state = session.game_states.last().unwrap();
         let player = current_game_state.player;
-        if let Some(end_after_moves) = args.end_after_moves {
-            if move_number >= end_after_moves {
-                break;
-            }
+        if let Some(end_after_moves) = args.end_after_moves
+            && move_number >= end_after_moves
+        {
+            break;
         }
         println!("{}", render_board::render_board(&current_game_state.board));
         println!(
