@@ -1,5 +1,5 @@
 use crate::commands::{Command, Session, execute_command, get_legal_command};
-use crate::data_model::{Game, PiecePosition, Player};
+use crate::data_model::{Game, Player};
 use crate::player_type::PlayerType;
 use clap::Parser;
 use ggez::conf::WindowMode;
@@ -19,8 +19,11 @@ pub mod square_outline_iterator;
 
 #[derive(clap_derive::Parser, Debug)]
 struct Args {
-    #[clap(short, long, default_value_t = 4)]
-    depth: usize,
+    #[arg(short, long, group = "time_control")]
+    depth: Option<usize>,
+
+    #[arg(short, long, group = "time_control")]
+    seconds: Option<u64>,
 
     #[clap(short='a', long, default_value_t = PlayerType::Human)]
     player_a: PlayerType,
@@ -34,17 +37,12 @@ struct Args {
     #[clap(short, long, default_value_t = 1000)]
     window_size: usize,
 
-    #[clap(short, long)]
+    #[clap(long)]
     skip_initial_moves: bool,
 }
 
 fn main() {
     let args = Args::parse();
-    let mut game = Game::new();
-    if args.skip_initial_moves {
-        game.board.player_positions[Player::White.as_index()] = PiecePosition::new(4, 3);
-        game.board.player_positions[Player::Black.as_index()] = PiecePosition::new(4, 5);
-    }
 
     let (ctx, event_loop) = ContextBuilder::new("quoridor-bot", "Torstein Tenstad")
         .window_mode(
@@ -57,7 +55,7 @@ fn main() {
     let (tx, rx) = channel::<Game>();
     let gui_state = GuiState {
         rx,
-        current_state: game.clone(),
+        current_state: Game::new(),
     };
 
     std::thread::spawn(move || {
@@ -65,14 +63,12 @@ fn main() {
             Player::White => args.player_a,
             Player::Black => args.player_b,
         };
-        let mut session = Session {
-            game_states: vec![game],
-        };
+        let mut session = Session::new();
         loop {
             let current_game_state = session.game_states.last().unwrap();
             let player = current_game_state.player;
             println!(
-                "{} ({}) to move. Walls: A: {}, B: {}",
+                "{} ({}) to move. Walls: White: {}, Black: {}",
                 player.to_string(),
                 player_type(player),
                 current_game_state.walls_left[Player::White.as_index()],
@@ -80,9 +76,10 @@ fn main() {
             );
             let command = match player_type(player) {
                 PlayerType::Human => get_legal_command(current_game_state, player),
-                PlayerType::Bot => {
-                    Command::AuxCommand(commands::AuxCommand::PlayBotMove { depth: args.depth })
-                }
+                PlayerType::Bot => Command::AuxCommand(commands::AuxCommand::PlayBotMove {
+                    depth: args.depth,
+                    seconds: args.seconds,
+                }),
             };
             execute_command(&mut session, command);
             tx.send(session.game_states.last().unwrap().clone())

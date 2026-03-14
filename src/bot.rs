@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime};
+
 use crate::{
     a_star::a_star,
     data_model::{
@@ -40,6 +42,33 @@ pub fn heuristic_board_score(game: &Game) -> isize {
     distance_priority * distance_score + wall_priority * wall_score
 }
 
+pub fn best_move_alpha_beta_iterative_deepening(
+    game: &Game,
+    player: Player,
+    search_duration: Duration,
+) -> (isize, Option<PlayerMove>, usize) {
+    let start = SystemTime::now();
+    let stop = || SystemTime::now().duration_since(start).unwrap() > search_duration;
+
+    let mut best_move: Option<PlayerMove> = None;
+    let mut depth = 1;
+    loop {
+        let (score, new_move) = alpha_beta(
+            game,
+            depth,
+            WHITE_LOSES_BLACK_WINS,
+            WHITE_WINS_BLACK_LOSES,
+            player,
+            best_move.clone(),
+            Some(&stop),
+        );
+        best_move = new_move;
+        if stop() {
+            break (score, best_move, depth);
+        }
+        depth += 1;
+    }
+}
 pub fn best_move_alpha_beta(
     game: &Game,
     player: Player,
@@ -51,6 +80,8 @@ pub fn best_move_alpha_beta(
         WHITE_LOSES_BLACK_WINS,
         WHITE_WINS_BLACK_LOSES,
         player,
+        None,
+        None,
     )
 }
 
@@ -60,6 +91,8 @@ pub fn alpha_beta(
     alpha: isize,
     beta: isize,
     player: Player,
+    search_first: Option<PlayerMove>,
+    stop: Option<&dyn Fn() -> bool>,
 ) -> (isize, Option<PlayerMove>) {
     if depth == 0 {
         return (heuristic_board_score(game), None);
@@ -70,7 +103,7 @@ pub fn alpha_beta(
     let score = match player {
         Player::White => {
             let mut value = WHITE_LOSES_BLACK_WINS;
-            for player_move in moves_ordered_by_heuristic_quality(game, player) {
+            for player_move in moves_ordered_by_heuristic_quality(game, player, search_first) {
                 let mut child_game_state = game.clone();
                 execute_move_unchecked(&mut child_game_state, player, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
@@ -78,8 +111,15 @@ pub fn alpha_beta(
                 {
                     continue;
                 }
-                let (score, _) =
-                    alpha_beta(&child_game_state, depth - 1, alpha, beta, player.opponent());
+                let (score, _) = alpha_beta(
+                    &child_game_state,
+                    depth - 1,
+                    alpha,
+                    beta,
+                    player.opponent(),
+                    None,
+                    None,
+                );
                 if score > value || best_move.is_none() {
                     best_move = Some(player_move);
                 }
@@ -88,12 +128,15 @@ pub fn alpha_beta(
                     break;
                 }
                 alpha = isize::max(alpha, value);
+                if stop.is_some_and(|f| f()) {
+                    break;
+                }
             }
             value
         }
         Player::Black => {
             let mut value = WHITE_WINS_BLACK_LOSES;
-            for player_move in moves_ordered_by_heuristic_quality(game, player) {
+            for player_move in moves_ordered_by_heuristic_quality(game, player, search_first) {
                 let mut child_game_state = game.clone();
                 execute_move_unchecked(&mut child_game_state, player, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
@@ -101,8 +144,15 @@ pub fn alpha_beta(
                 {
                     continue;
                 }
-                let (score, _) =
-                    alpha_beta(&child_game_state, depth - 1, alpha, beta, player.opponent());
+                let (score, _) = alpha_beta(
+                    &child_game_state,
+                    depth - 1,
+                    alpha,
+                    beta,
+                    player.opponent(),
+                    None,
+                    None,
+                );
                 if score < value || best_move.is_none() {
                     best_move = Some(player_move);
                 }
@@ -111,6 +161,9 @@ pub fn alpha_beta(
                     break;
                 }
                 beta = isize::min(beta, value);
+                if stop.is_some_and(|f| f()) {
+                    break;
+                }
             }
             value
         }
@@ -118,8 +171,15 @@ pub fn alpha_beta(
     (score, best_move)
 }
 
-fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<PlayerMove> {
+fn moves_ordered_by_heuristic_quality(
+    game: &Game,
+    player: Player,
+    search_first: Option<PlayerMove>,
+) -> Vec<PlayerMove> {
     let mut moves: Vec<PlayerMove> = Default::default();
+    if let Some(search_first) = search_first {
+        moves.push(search_first); // TODO: Could ensure that the code below does not also add this mode. Unclear if this is worth it.
+    }
     let player_position = game.board.player_position(player);
     let opponent_position = game.board.player_position(player.opponent());
     let x_diff = opponent_position.x() as isize - player_position.x() as isize;

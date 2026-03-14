@@ -2,7 +2,7 @@ use clap::Parser;
 
 use crate::{
     commands::{Command, Session, execute_command, get_legal_command},
-    data_model::{Game, Player},
+    data_model::Player,
     player_type::PlayerType,
 };
 
@@ -32,15 +32,12 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let game = Game::new();
 
     let player_type = |p: Player| match p {
         Player::White => args.player_a,
         Player::Black => args.player_b,
     };
-    let mut session = Session {
-        game_states: vec![game],
-    };
+    let mut session = Session::new();
 
     for move_number in 0.. {
         let current_game_state = session.game_states.last().unwrap();
@@ -61,9 +58,10 @@ fn main() {
 
         let command = match player_type(player) {
             PlayerType::Human => get_legal_command(current_game_state, player),
-            PlayerType::Bot => {
-                Command::AuxCommand(commands::AuxCommand::PlayBotMove { depth: args.depth })
-            }
+            PlayerType::Bot => Command::AuxCommand(commands::AuxCommand::PlayBotMove {
+                depth: Some(args.depth),
+                seconds: None,
+            }),
         };
         execute_command(&mut session, command);
     }

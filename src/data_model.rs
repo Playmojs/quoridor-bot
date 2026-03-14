@@ -77,7 +77,7 @@ pub struct MovePiece {
     pub direction_on_collision: Direction,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum PlayerMove {
     PlaceWall {
         orientation: WallOrientation,
@@ -148,18 +148,11 @@ impl Board {
 }
 
 impl Game {
-    pub fn new() -> Self {
+    pub fn 
+    new() -> Self {
         Self {
             player: Player::default(),
             board: Board::new(),
-            walls_left: [10, 10],
-        }
-    }
-
-    pub fn new_with_initial_moves_skipped() -> Self {
-        Self {
-            player: Player::default(),
-            board: Board::new_with_initial_moves_skipped(),
             walls_left: [10, 10],
         }
     }
