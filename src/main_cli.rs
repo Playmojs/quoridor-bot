@@ -4,7 +4,7 @@ use clap::Parser;
 use burn::backend::NdArray ;
 
 use crate::{
-    commands::{execute_command, get_legal_command, Command, Session}, data_model::{Game, Player}, nn_bot::{BurnPolicyValueNet, PolicyValueNet}, player_type::PlayerType
+    commands::{Command, Session, execute_command, get_legal_command}, data_model::{Game, Player}, nn_bot::QuoridorNet, player_type::PlayerType
 };
 
 pub mod a_star;
@@ -42,15 +42,15 @@ fn main() {
 
     let device = <NdArray as burn::prelude::Backend>::Device::default();
 
-    let mut neural_networks: HashMap<Player, BurnPolicyValueNet::<NdArray>> = HashMap::new();
+    let mut neural_networks: HashMap<Player, QuoridorNet> = HashMap::new();
 
     if args.player_a == PlayerType::NeuralNet
     {
-        neural_networks.insert(Player::White, BurnPolicyValueNet::<NdArray>::new(device));
+        neural_networks.insert(Player::White, QuoridorNet::new());
     }
     if args.player_b == PlayerType::NeuralNet
     {
-        neural_networks.insert(Player::Black, BurnPolicyValueNet::<NdArray>::new(device));
+        neural_networks.insert(Player::Black, QuoridorNet::new());
     }
 
     let player_type = |p: Player| match p {

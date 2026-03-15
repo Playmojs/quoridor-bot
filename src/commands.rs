@@ -7,7 +7,7 @@ use crate::{
     bot::{LOOSING_SCORE, WINNING_SCORE, alpha_beta, best_move_alpha_beta},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
-    nn_bot::{self, BurnPolicyValueNet, PolicyValueNet}
+    nn_bot::{self, PolicyValueNet, QuoridorNet}
 };
 
 #[derive(clap_derive::Subcommand, Debug)]
@@ -56,7 +56,7 @@ pub enum Command {
 
 pub struct Session {
     pub game_states: Vec<Game>,
-    pub neural_networks: HashMap<Player, BurnPolicyValueNet<NdArray>>
+    pub neural_networks: HashMap<Player, QuoridorNet>
 }
 
 pub fn execute_command(session: &mut Session, command: Command) {

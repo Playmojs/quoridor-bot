@@ -51,7 +51,7 @@ fn action_from_id(action_id: ActionId) -> PlayerMove {
     return ALL_MOVES.get(action_id as usize).unwrap().clone();
 }
 
-pub fn get_move(game: &Game, network: &BurnPolicyValueNet<NdArray>, player: Player, temperature: f32) -> PlayerMove
+pub fn get_move(game: &Game, network: &QuoridorNet, player: Player, temperature: f32) -> PlayerMove
 {
     let mut rng = rng();
 
@@ -534,55 +534,64 @@ pub trait PolicyValueNet: Send + 'static {
 /// Burn network
 
 /// Quoridor AlphaZero-style network.
-#[derive(Module, Debug)]
-pub struct QuoridorNet<B: Backend> {
-    conv1: Conv2d<B>,
-    conv2: Conv2d<B>,
-    fc_policy: nn::Linear<B>,
-    fc_value1: nn::Linear<B>,
-    fc_value2: nn::Linear<B>,
+pub struct QuoridorNet
+{
+    device: <NdArray as burn::prelude::Backend>::Device,
+    network_model: NetworkModel
+}
+
+#[derive(Module, Debug, Clone)]
+pub struct NetworkModel
+{
+    conv1: Conv2d<NdArray>,
+    conv2: Conv2d<NdArray>,
+    fc_policy: nn::Linear<NdArray>,
+    fc_value1: nn::Linear<NdArray>,
+    fc_value2: nn::Linear<NdArray>,
 }
 
 #[derive(Clone, Debug)]
-pub struct BurnNetworkOutput<B: Backend> {
+pub struct NeuralNetOutput<B: Backend> {
     pub policy: Tensor<B, 2>, // [batch, 138]
     pub value: Tensor<B, 2>,  // [batch, 1]
 }
 
-impl<B: Backend> QuoridorNet<B> {
-    pub fn new(device: &B::Device) -> Self {
+impl QuoridorNet {
+    pub fn new() -> Self {
+        let device = <NdArray as burn::prelude::Backend>::Device::default();
+
         let conv_cfg = Conv2dConfig::new([7, 64], [3, 3])
             .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false }); // in_channels=7, out=64
 
-        let conv1 = conv_cfg.init(device);
+        let conv1 = conv_cfg.init(&device);
 
         let conv_cfg2 = Conv2dConfig::new([64, 64], [3, 3])
           .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false });
-        let conv2 = conv_cfg2.init(device);
+        let conv2 = conv_cfg2.init(&device);
 
         // Flatten feature map (approx 64 * 5 * 5 after two 3x3 conv on 9x9 input, no padding)
         let fc_policy = nn::LinearConfig::new(64 * 5 * 5, 138)
             .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false })
-            .init(device);
+            .init(&device);
 
         let fc_value1 = nn::LinearConfig::new(64 * 5 * 5, 64)
             .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false })
-            .init(device);
+            .init(&device);
 
         let fc_value2 = nn::LinearConfig::new(64, 1)
             .with_initializer(Initializer::XavierNormal { gain: (1.0) })
-            .init(device);
+            .init(&device);
 
         Self {
-            conv1,
-            conv2,
-            fc_policy,
-            fc_value1,
-            fc_value2,
+            device,
+            network_model: NetworkModel { conv1, conv2, fc_policy, fc_value1, fc_value2 }
         }
     }
+}
 
-    pub fn forward(&self, x: Tensor<B, 4>) -> BurnNetworkOutput<B> {
+impl NetworkModel
+{
+    pub fn forward(&self, x: Tensor<NdArray, 4>) -> NeuralNetOutput<NdArray> {
         let relu = Relu::new();
         // x: [batch, 7, 9, 9]
         let x = self.conv1.forward(x);
@@ -601,21 +610,10 @@ impl<B: Backend> QuoridorNet<B> {
         let value = relu.forward(value);
         let value = self.fc_value2.forward(value).tanh(); // range (-1,1)
 
-        BurnNetworkOutput { policy, value }
+        NeuralNetOutput { policy, value }
     }
 }
 
-pub struct BurnPolicyValueNet<B: Backend> {
-    model: QuoridorNet<B>,
-    device: B::Device,
-}
-
-impl<B: Backend> BurnPolicyValueNet<B> {
-    pub fn new(device: B::Device) -> Self {
-        let model = QuoridorNet::new(&device);
-        Self { model, device }
-    }
-}
 
 pub fn encode_batch_to_tensor<B: Backend>(
     batch: &[EncodedState],
@@ -645,11 +643,11 @@ pub fn encode_batch_to_tensor<B: Backend>(
     )
 }
 
-fn predict_batch<B: Backend>(network: &BurnPolicyValueNet<B>, batch: &[EncodedState]) -> Vec<NetOut> {
+fn predict_batch(network: &QuoridorNet, batch: &[EncodedState]) -> Vec<NetOut> {
 // Convert batch &[EncodedState] → Tensor<B,4> of shape [batch, 7, 9, 9]
-    let input = encode_batch_to_tensor::<B>(batch, &network.device);
+    let input = encode_batch_to_tensor::<NdArray>(batch, &network.device);
 
-    let out = network.model.forward(input);
+    let out = network.network_model.forward(input);
 
     // Map NetOut<B> → your NetOut type (convert tensor to Vec<f32>)
     let values: Vec<f32> = out.value.into_data().to_vec().unwrap();

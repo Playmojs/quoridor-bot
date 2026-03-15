@@ -1,7 +1,7 @@
 use crate::commands::{Command, Session, execute_command, get_legal_command};
 use crate::data_model::{Game, PiecePosition, Player};
 use crate::player_type::PlayerType;
-use crate::nn_bot::{BurnPolicyValueNet, PolicyValueNet};
+use crate::nn_bot::{QuoridorNet};
 use clap::Parser;
 use ggez::conf::WindowMode;
 use ggez::event::{self, EventHandler};
@@ -50,18 +50,16 @@ fn main() {
         game.board.player_positions[Player::White.as_index()] = PiecePosition::new(4, 3);
         game.board.player_positions[Player::Black.as_index()] = PiecePosition::new(4, 5);
     }
-    
-    let device = <NdArray as burn::prelude::Backend>::Device::default();
 
-    let mut neural_networks: HashMap<Player, BurnPolicyValueNet::<NdArray>> = HashMap::new();
+    let mut neural_networks: HashMap<Player, QuoridorNet> = HashMap::new();
 
     if args.player_a == PlayerType::NeuralNet
     {
-        neural_networks.insert(Player::White, BurnPolicyValueNet::<NdArray>::new(device));
+        neural_networks.insert(Player::White, QuoridorNet::new());
     }
     if args.player_b == PlayerType::NeuralNet
     {
-        neural_networks.insert(Player::Black, BurnPolicyValueNet::<NdArray>::new(device));
+        neural_networks.insert(Player::Black, QuoridorNet::new());
     }
 
     let (ctx, event_loop) = ContextBuilder::new("quoridor-bot", "Torstein Tenstad")
