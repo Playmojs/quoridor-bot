@@ -3,13 +3,16 @@ use std::collections::HashMap;
 use clap::Parser;
 use burn::backend::NdArray ;
 
-use crate::{
-    commands::{Command, Session, execute_command, get_legal_command}, data_model::{Game, Player}, nn_bot::QuoridorNet, player_type::PlayerType
-};
 
-pub mod a_star;
-pub mod nn_bot;
+use crate::commands::{Command, Session, execute_command, get_legal_command};
+use crate::data_model::{Player};
+use crate::player_type::{PlayerType};
+use crate::nn_bot::{QuoridorNet};
+
+
 pub mod all_moves;
+pub mod nn_bot;
+pub mod a_star;
 pub mod bot;
 pub mod commands;
 pub mod data_model;
@@ -38,7 +41,6 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let game = Game::new();
 
     let device = <NdArray as burn::prelude::Backend>::Device::default();
 
@@ -57,19 +59,15 @@ fn main() {
         Player::White => args.player_a,
         Player::Black => args.player_b,
     };
-    let mut session = Session 
-    {
-        game_states: vec![game],
-        neural_networks: neural_networks
-    };
+    let mut session = Session::new(neural_networks);
 
     for move_number in 0.. {
         let current_game_state = session.game_states.last().unwrap();
         let player = current_game_state.player;
-        if let Some(end_after_moves) = args.end_after_moves {
-            if move_number >= end_after_moves {
-                break;
-            }
+        if let Some(end_after_moves) = args.end_after_moves
+            && move_number >= end_after_moves
+        {
+            break;
         }
         println!("{}", render_board::render_board(&current_game_state.board));
         println!(
@@ -82,12 +80,13 @@ fn main() {
 
         let command = match player_type(player) {
             PlayerType::Human => get_legal_command(current_game_state, player),
-            PlayerType::Bot => {
-                Command::AuxCommand(commands::AuxCommand::PlayBotMove { depth: args.depth })
-            },
             PlayerType::NeuralNet => {
                 Command::AuxCommand(commands::AuxCommand::PlayNNMove {temperature: args.temperature})
-            }
+            },
+            PlayerType::Bot => Command::AuxCommand(commands::AuxCommand::PlayBotMove {
+                depth: Some(args.depth),
+                seconds: None,
+            }),
         };
         execute_command(&mut session, command);
     }

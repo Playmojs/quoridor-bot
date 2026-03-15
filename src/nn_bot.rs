@@ -11,11 +11,8 @@
 //
 // You can split this into modules later; kept single-file for clarity.
 
-use std::hash::Hash;
-use std::ops::Index;
 use burn::backend::NdArray;
-use burn::tensor::{Data, TensorData};
-use rand::{prelude::*, rng, distr};
+use rand::{prelude::*, rng};
 use burn;
 use burn::nn::{self, Initializer, Relu};
 use burn::tensor::{backend::Backend, Tensor};

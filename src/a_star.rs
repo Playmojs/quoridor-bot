@@ -58,6 +58,7 @@ impl<K: Ord + Clone, T: Ord + Hash + Clone> PriorityQueue<K, T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn peek(&self) -> Option<(K, T)> {
         let Reverse((k, t)) = self.heap.peek()?;
         Some((k.clone(), t.clone()))
@@ -74,12 +75,14 @@ impl<K: Ord + Clone, T: Ord + Hash + Clone> PriorityQueue<K, T> {
         self.set.insert(t)
     }
 
+    #[allow(dead_code)]
     pub fn contains(&self, t: &T) -> bool {
         self.set.contains(t)
     }
 
+    #[allow(dead_code)]
     pub fn remove(&mut self, t: &T) {
-        self.heap.retain(|Reverse((k, t_))| t != t_);
+        self.heap.retain(|Reverse((_k, t_))| t != t_);
     }
 }
 
