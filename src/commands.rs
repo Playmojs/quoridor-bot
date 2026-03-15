@@ -1,12 +1,13 @@
 use std::{collections::HashMap, thread::current};
 
+use burn::backend::NdArray;
 use clap::Parser;
 
 use crate::{
     bot::{LOOSING_SCORE, WINNING_SCORE, alpha_beta, best_move_alpha_beta},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
-    nn_bot::{PolicyValueNet, GameAdapter}
+    nn_bot::{self, BurnPolicyValueNet, PolicyValueNet}
 };
 
 #[derive(clap_derive::Subcommand, Debug)]
@@ -55,7 +56,7 @@ pub enum Command {
 
 pub struct Session {
     pub game_states: Vec<Game>,
-    pub neural_networks: HashMap<Player, Box<dyn PolicyValueNet>>
+    pub neural_networks: HashMap<Player, BurnPolicyValueNet<NdArray>>
 }
 
 pub fn execute_command(session: &mut Session, command: Command) {
@@ -87,7 +88,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
             }
             AuxCommand::PlayNNMove {temperature} =>
             {
-                let nn_move = Game::get_move(&current_game_state, session.neural_networks.get(&player).unwrap(), player, temperature);
+                let nn_move = nn_bot::get_move(&current_game_state, session.neural_networks.get(&player).unwrap(), player, temperature);
                 
                 let mut next_game_state = current_game_state.clone();
                 execute_move_unchecked(&mut next_game_state, player, &nn_move);

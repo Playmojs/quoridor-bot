@@ -13,6 +13,7 @@
 
 use std::hash::Hash;
 use std::ops::Index;
+use burn::backend::NdArray;
 use burn::tensor::{Data, TensorData};
 use rand::{prelude::*, rng, distr};
 use burn;
@@ -28,10 +29,6 @@ use crate::game_logic::is_move_legal;
 
 // ===== 0) Domain adapter =====
 // Glue layer between YOUR existing rules/state and this scaffold.
-
-/// Unique key for a position (e.g., Zobrist). Must be stable across a game.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct PositionKey(pub u64);
 
 /// A compact action id in [0, 138). 0..10 pawn moves, 10..138 walls, for example.
 pub type ActionId = u16; // keep it small
@@ -49,148 +46,83 @@ pub struct ActionMask(pub [bool; ACTIONS]);
 
 pub const ACTIONS: usize = 138; // adjust if you use a different scheme
 
-/// Your game-specific adapter must provide these.
-pub trait GameAdapter: Clone + Send + Sync + 'static {
-    type State: Clone + Send + Sync + 'static;
-    type Action: Clone + Send + Sync + 'static;
 
-    /// Hashable key for transpositions.
-    fn key(s: &Self::State) -> PositionKey;
-
-    /// True if terminal; returns Some(result) in [-1.0, 0.0, 1.0] from current player's POV.
-    fn terminal_value(s: &Self::State) -> bool;
-
-    /// Generate legal actions (as ActionId) and the mask aligned to [0, ACTIONS).
-    fn legal_actions(s: &Self::State) -> Vec<ActionId>;
-
-    fn action_from_id(action_id: ActionId) -> Self::Action;
-
-    /// Apply action to get next state; also toggles side-to-move inside state.
-    fn get_move(s: &Self, neural_network: &Box<dyn PolicyValueNet>, player: Player, temperature: f32) -> Self::Action;
-
-    /// Encode to input planes for the NN (broadcast your scalars here as planes).
-    fn encode(s: &Self::State) -> EncodedState;
-
-    /// Optional: symmetry transforms (rotations/reflections) for augmentation.
-    fn symmetries(s: &Self::State, pi: &[f32]) -> Vec<(EncodedState, Vec<f32>)> {
-        vec![(Self::encode(s ), pi.to_vec())]
-    }
-
-    fn winner(state: &Self::State) -> Option<usize>;
-
-    fn current_player(&self, state: &Self::State) -> usize;
+fn action_from_id(action_id: ActionId) -> PlayerMove {
+    return ALL_MOVES.get(action_id as usize).unwrap().clone();
 }
 
+pub fn get_move(game: &Game, network: &BurnPolicyValueNet<NdArray>, player: Player, temperature: f32) -> PlayerMove
+{
+    let mut rng = rng();
 
-impl GameAdapter for Game {
-    type State = Game;
-    type Action = PlayerMove;
+    let prediction = predict_batch(network, &[encode(game)]);
 
-    fn key(s: &Self::State) -> PositionKey
-    {
-        PositionKey((1))
+    let legal_moves: Vec<(usize, &f32)> = prediction.first().unwrap().policy_logits.iter().enumerate()
+        .filter(|(id, _)|{is_move_legal(game, player, &action_from_id(*id as u16))}).collect();
+
+
+    // Apply temperature
+    let max_logit = legal_moves.iter().map(|&(_, l)| l.clone()).fold(f32::NEG_INFINITY, f32::max);
+    let exp_logits: Vec<f32> = legal_moves
+        .iter()
+        .map(|&(_, logit)| ((logit - max_logit) / temperature).exp())
+        .collect();
+
+        // Normalize into probabilities
+    let sum_exp: f32 = exp_logits.iter().sum();
+    let probs: Vec<f32> = exp_logits.iter().map(|x| x / sum_exp).collect();
+
+    // Sample from distribution
+    let dist = rand::distr::weighted::WeightedIndex::new(&probs).unwrap();
+    let choice = dist.sample(&mut rng);
+
+    // Extract the most likely move from the output
+    action_from_id( legal_moves[choice].0 as u16)
+}
+
+fn encode(game: &Game) -> EncodedState {
+    // shape: [channels, 9, 9]
+    let mut channels = vec![vec![vec![0.0; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT]; 8];
+
+    // player pawns
+    for p in [Player::White, Player::Black] {
+        let pos = game.board.player_position(p);
+        channels[p.as_index()][pos.y()][pos.x()] = 1.0;
     }
 
-    fn current_player(&self, state: &Self::State) -> usize {
-        state.player.as_index()
-    }
-
-    fn legal_actions(state: &Self::State) -> Vec<ActionId> {
-        // TODO: generate moves from your rules engine
-        vec![] // placeholder
-    }
-
-    fn action_from_id(action_id: ActionId) -> Self::Action {
-        return ALL_MOVES.get(action_id as usize).unwrap().clone();
-    }
-
-    fn get_move(s: &Self, network: &Box<dyn PolicyValueNet>, player: Player, temperature: f32) -> Self::Action
-    {
-        let mut rng = rng();
-
-        let prediction = network.predict_batch(&[Game::encode(s)]);
-
-        let legal_moves: Vec<(usize, &f32)> = prediction.first().unwrap().policy_logits.iter().enumerate()
-            .filter(|(id, _)|{is_move_legal(s, player, &Game::action_from_id(*id as u16))}).collect();
-
-
-        // Apply temperature
-        let max_logit = legal_moves.iter().map(|&(_, l)| l.clone()).fold(f32::NEG_INFINITY, f32::max);
-        let exp_logits: Vec<f32> = legal_moves
-            .iter()
-            .map(|&(_, logit)| ((logit - max_logit) / temperature).exp())
-            .collect();
-
-         // Normalize into probabilities
-        let sum_exp: f32 = exp_logits.iter().sum();
-        let probs: Vec<f32> = exp_logits.iter().map(|x| x / sum_exp).collect();
-
-        // Sample from distribution
-        let dist = rand::distr::weighted::WeightedIndex::new(&probs).unwrap();
-        let choice = dist.sample(&mut rng);
-
-        // Extract the most likely move from the output
-        Game::action_from_id( legal_moves[choice].0 as u16)
-    }
-
-    fn terminal_value(state: &Self::State) -> bool {
-        // win = pawn reaches opposite side
-        let white_y = state.board.player_positions[Player::White.as_index()].y();
-        let black_y = state.board.player_positions[Player::Black.as_index()].y();
-        white_y == PIECE_GRID_HEIGHT - 1 || black_y == 0
-    }
-
-    fn winner(state: &Self::State) -> Option<usize> {
-        let white_y = state.board.player_positions[Player::White.as_index()].y();
-        let black_y = state.board.player_positions[Player::Black.as_index()].y();
-        if white_y == PIECE_GRID_HEIGHT - 1 { Some(Player::White.as_index()) }
-        else if black_y == 0 { Some(Player::Black.as_index()) }
-        else { None }
-    }
-
-    fn encode(state: &Self::State) -> EncodedState {
-        // shape: [channels, 9, 9]
-        let mut channels = vec![vec![vec![0.0; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT]; 8];
-
-        // player pawns
-        for p in [Player::White, Player::Black] {
-            let pos = state.board.player_position(p);
-            channels[p.as_index()][pos.y()][pos.x()] = 1.0;
-        }
-
-        // walls (just fill in as 1.0 where a wall is placed)
-        for x in 0..WALL_GRID_WIDTH {
-            for y in 0..WALL_GRID_HEIGHT {
-                if let Some(o) = state.board.walls[x][y] {
-                    match o {
-                        WallOrientation::Horizontal =>
-                            channels[2][y][x] = 1.0,
-                        WallOrientation::Vertical =>
-                            channels[3][y][x] = 1.0,
-                    }
+    // walls (just fill in as 1.0 where a wall is placed)
+    for x in 0..WALL_GRID_WIDTH {
+        for y in 0..WALL_GRID_HEIGHT {
+            if let Some(o) = game.board.walls[x][y] {
+                match o {
+                    WallOrientation::Horizontal =>
+                        channels[2][y][x] = 1.0,
+                    WallOrientation::Vertical =>
+                        channels[3][y][x] = 1.0,
                 }
             }
         }
-
-        // walls left (normalized by 10)
-        for x in 0..PIECE_GRID_WIDTH {
-            for y in 0..PIECE_GRID_HEIGHT {
-                channels[4][y][x] = state.walls_left[0] as f32 / 10.0;
-                channels[5][y][x] = state.walls_left[1] as f32 / 10.0;
-            }
-        }
-
-        // player-to-move plane
-        let current = state.player.as_index();
-        for x in 0..PIECE_GRID_WIDTH {
-            for y in 0..PIECE_GRID_HEIGHT {
-                channels[6][y][x] = if current == 0 { 1.0 } else { 0.0 };
-            }
-        }
-
-        EncodedState { planes: channels, c: 8 }
     }
+
+    // walls left (normalized by 10)
+    for x in 0..PIECE_GRID_WIDTH {
+        for y in 0..PIECE_GRID_HEIGHT {
+            channels[4][y][x] = game.walls_left[0] as f32 / 10.0;
+            channels[5][y][x] = game.walls_left[1] as f32 / 10.0;
+        }
+    }
+
+    // player-to-move plane
+    let current = game.player.as_index();
+    for x in 0..PIECE_GRID_WIDTH {
+        for y in 0..PIECE_GRID_HEIGHT {
+            channels[6][y][x] = if current == 0 { 1.0 } else { 0.0 };
+        }
+    }
+
+    EncodedState { planes: channels, c: 8 }
 }
+
 // ===== 1) Policy-Value Network interface =====
 
 /// Output of a network forward pass on a single position.
@@ -563,8 +495,8 @@ pub trait PolicyValueNet: Send + 'static {
 //         // 1) Self-play
 //         let mut mcts = Mcts::<G>::new(mcts_cfg.clone(), net.as_ref().into());
 //         for _ in 0..tcfg.games_per_iter {
-//             let traj = play_one_game::<G>(&mut mcts, initial_state.clone(), &sp_cfg);
-//             replay.push_game::<G>(&traj);
+//             let traj = play_one_<G>(&mut mcts, initial_state.clone(), &sp_cfg);
+//             replay.push_<G>(&traj);
 //         }
 
 //         // 2) Train
@@ -713,21 +645,21 @@ pub fn encode_batch_to_tensor<B: Backend>(
     )
 }
 
-impl<B: Backend> PolicyValueNet for BurnPolicyValueNet<B> {
-    fn predict_batch(&self, batch: &[EncodedState]) -> Vec<NetOut> {
-        // Convert batch &[EncodedState] → Tensor<B,4> of shape [batch, 7, 9, 9]
-        let input = encode_batch_to_tensor::<B>(batch, &self.device);
+fn predict_batch<B: Backend>(network: &BurnPolicyValueNet<B>, batch: &[EncodedState]) -> Vec<NetOut> {
+// Convert batch &[EncodedState] → Tensor<B,4> of shape [batch, 7, 9, 9]
+    let input = encode_batch_to_tensor::<B>(batch, &network.device);
 
-        let out = self.model.forward(input);
+    let out = network.model.forward(input);
 
-        // Map NetOut<B> → your NetOut type (convert tensor to Vec<f32>)
-        let values: Vec<f32> = out.value.into_data().to_vec().unwrap();
+    // Map NetOut<B> → your NetOut type (convert tensor to Vec<f32>)
+    let values: Vec<f32> = out.value.into_data().to_vec().unwrap();
 
-        out.policy.iter_dim(0)
-            .zip(values.into_iter())
-            .map(|(p, v)| {
-                let policy_vec: Vec<f32> = p.into_data().to_vec().unwrap();
-                NetOut { policy_logits: policy_vec.try_into().expect("Policy wrong length"), value: v }})
-            .collect()
-    }
+    out.policy.iter_dim(0)
+        .zip(values.into_iter())
+        .map(|(p, v)| {
+            let policy_vec: Vec<f32> = p.into_data().to_vec().unwrap();
+            NetOut { policy_logits: policy_vec.try_into().expect("Policy wrong length"), value: v }})
+        .collect()
 }
+
+

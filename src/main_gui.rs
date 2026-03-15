@@ -50,20 +50,18 @@ fn main() {
         game.board.player_positions[Player::White.as_index()] = PiecePosition::new(4, 3);
         game.board.player_positions[Player::Black.as_index()] = PiecePosition::new(4, 5);
     }
+    
+    let device = <NdArray as burn::prelude::Backend>::Device::default();
 
-    type Backend = NdArray;
-
-    let device = <Backend as burn::tensor::backend::Backend>::Device::default();
-
-    let mut neural_networks: HashMap<Player, Box<dyn PolicyValueNet>> = HashMap::new();
+    let mut neural_networks: HashMap<Player, BurnPolicyValueNet::<NdArray>> = HashMap::new();
 
     if args.player_a == PlayerType::NeuralNet
     {
-        neural_networks.insert(Player::White, Box::new(BurnPolicyValueNet::<Backend>::new(device)));
+        neural_networks.insert(Player::White, BurnPolicyValueNet::<NdArray>::new(device));
     }
     if args.player_b == PlayerType::NeuralNet
     {
-        neural_networks.insert(Player::Black, Box::new(BurnPolicyValueNet::<Backend>::new(device)));
+        neural_networks.insert(Player::Black, BurnPolicyValueNet::<NdArray>::new(device));
     }
 
     let (ctx, event_loop) = ContextBuilder::new("quoridor-bot", "Torstein Tenstad")
